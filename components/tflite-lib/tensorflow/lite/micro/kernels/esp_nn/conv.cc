@@ -13,8 +13,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "tensorflow/lite/micro/kernels/conv.h"
-
 #include "tensorflow/lite/c/builtin_op_data.h"
 #include "tensorflow/lite/c/common.h"
 #include "tensorflow/lite/kernels/internal/common.h"
@@ -24,15 +22,12 @@ limitations under the License.
 #include "tensorflow/lite/kernels/internal/tensor_ctypes.h"
 #include "tensorflow/lite/kernels/kernel_util.h"
 #include "tensorflow/lite/kernels/padding.h"
+#include "tensorflow/lite/micro/kernels/conv.h"
 #include "tensorflow/lite/micro/kernels/kernel_util.h"
 
 #include "freertos/FreeRTOS.h"
 #include <esp_timer.h>
-
-#if ESP_NN
 #include <esp_nn.h>
-#endif
-
 
 long long conv_total_time = 0;
 
@@ -41,9 +36,7 @@ namespace {
 
 struct NodeData {
   OpDataConv op_data;
-#if ESP_NN
   int buffer_idx;
-#endif
 };
 
 void* Init(TfLiteContext* context, const char* buffer, size_t length) {
@@ -59,17 +52,12 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
   const auto& params =
       *(static_cast<const TfLiteConvParams*>(node->builtin_data));
 
-  MicroContext* micro_context = GetMicroContext(context);
-
-  TfLiteTensor* input =
-      micro_context->AllocateTempInputTensor(node, kConvInputTensor);
-  TF_LITE_ENSURE(context, input != nullptr);
-  TfLiteTensor* filter =
-      micro_context->AllocateTempInputTensor(node, kConvWeightsTensor);
-  TF_LITE_ENSURE(context, filter != nullptr);
-  TfLiteTensor* output =
-      micro_context->AllocateTempOutputTensor(node, kConvOutputTensor);
+  TfLiteTensor* output = GetOutput(context, node, kConvOutputTensor);
   TF_LITE_ENSURE(context, output != nullptr);
+  const TfLiteTensor* input = GetInput(context, node, kConvInputTensor);
+  TF_LITE_ENSURE(context, input != nullptr);
+  const TfLiteTensor* filter = GetInput(context, node, kConvWeightsTensor);
+  TF_LITE_ENSURE(context, filter != nullptr);
 
   const int input_width = input->dims->data[2];
   const int input_height = input->dims->data[1];
@@ -110,8 +98,8 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
       context, node, params, input_width, input_height, filter_width,
       filter_height, output_width, output_height, input->type, &data->op_data));
 
-#if ESP_NN
   if (input->type == kTfLiteInt8) {
+
     data_dims_t input_dims =  {
                                 .width = input_width, .height = input_height,
                                 .channels = input->dims->data[3], 1
@@ -137,16 +125,14 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
       data->buffer_idx = -1;
     }
   }
-#endif
 
-  micro_context->DeallocateTempTfLiteTensor(output);
-  micro_context->DeallocateTempTfLiteTensor(input);
-  micro_context->DeallocateTempTfLiteTensor(filter);
+  //micro_context->DeallocateTempTfLiteTensor(output);
+  //micro_context->DeallocateTempTfLiteTensor(input);
+  //micro_context->DeallocateTempTfLiteTensor(filter);
 
   return kTfLiteOk;
 }
 
-#if ESP_NN
 // Fixed-point per-channel-quantization convolution Int8 function wrapper.
 inline void EvalQuantizedPerChannel(
     TfLiteContext* context, TfLiteNode* node, const TfLiteConvParams& params,
@@ -249,7 +235,6 @@ inline void EvalQuantizedPerChannel(
         tflite::micro::GetTensorData<int8_t>(output));
   }
 }
-#endif
 
 TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
   const TfLiteEvalTensor* input =
@@ -290,23 +275,8 @@ TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
       break;
     }
     case kTfLiteInt8: {
-#if ESP_NN
       EvalQuantizedPerChannel(context, node, params, data, input, filter,
                               bias, output);
-#else
-      reference_integer_ops::ConvPerChannel(
-          ConvParamsQuantized(params, data.op_data),
-          data.op_data.per_channel_output_multiplier,
-          data.op_data.per_channel_output_shift,
-          tflite::micro::GetTensorShape(input),
-          tflite::micro::GetTensorData<int8_t>(input),
-          tflite::micro::GetTensorShape(filter),
-          tflite::micro::GetTensorData<int8_t>(filter),
-          tflite::micro::GetTensorShape(bias),
-          tflite::micro::GetTensorData<int32_t>(bias),
-          tflite::micro::GetTensorShape(output),
-          tflite::micro::GetTensorData<int8_t>(output));
-#endif
       break;
     }
     case kTfLiteUInt8: {
@@ -324,21 +294,31 @@ TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
                           nullptr);
       break;
     }
+
     default:
       TF_LITE_KERNEL_LOG(context, "Type %s (%d) not supported.",
                          TfLiteTypeGetName(input->type), input->type);
       return kTfLiteError;
   }
+  
   long long time_this_instance = esp_timer_get_time() - start_time;
   conv_total_time += time_this_instance;
   //printf("time this instance: %llu\n", time_this_instance / 1000);
+
   return kTfLiteOk;
 }
 
 }  // namespace
 
 TfLiteRegistration Register_CONV_2D() {
-  return tflite::micro::RegisterOp(Init, Prepare, Eval);
+  return {/*init=*/Init,
+          /*free=*/nullptr,
+          /*prepare=*/Prepare,
+          /*invoke=*/Eval,
+          /*profiling_string=*/nullptr,
+          /*builtin_code=*/0,
+          /*custom_name=*/nullptr,
+          /*version=*/0};
 }
 
 }  // namespace tflite
