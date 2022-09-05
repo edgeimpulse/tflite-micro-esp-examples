@@ -261,6 +261,12 @@ TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
   long long start_time = esp_timer_get_time();
   switch (input->type) {  // Already know in/out types are same.
     case kTfLiteFloat32: {
+      #if EI_TFLITE_DISABLE_CONV_2D_IN_F32
+      TF_LITE_KERNEL_LOG(context, "Type %s (%d) not supported.",
+                      TfLiteTypeGetName(input->type), input->type);
+      return kTfLiteError;
+      #endif
+
       tflite::reference_ops::Conv(
           ConvParamsFloat(params, data.op_data),
           tflite::micro::GetTensorShape(input),
@@ -275,11 +281,23 @@ TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
       break;
     }
     case kTfLiteInt8: {
+      #if EI_TFLITE_DISABLE_CONV_2D_IN_I8
+      TF_LITE_KERNEL_LOG(context, "Type %s (%d) not supported.",
+                      TfLiteTypeGetName(input->type), input->type);
+      return kTfLiteError;
+      #endif
+
       EvalQuantizedPerChannel(context, node, params, data, input, filter,
                               bias, output);
       break;
     }
     case kTfLiteUInt8: {
+      #if EI_TFLITE_DISABLE_CONV_2D_IN_U8
+      TF_LITE_KERNEL_LOG(context, "Type %s (%d) not supported.",
+                      TfLiteTypeGetName(input->type), input->type);
+      return kTfLiteError;
+      #endif
+
       //EvalQuantized
       reference_ops::Conv(ConvParamsQuantized(params, data.op_data),
                           tflite::micro::GetTensorShape(input),
@@ -300,7 +318,7 @@ TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
                          TfLiteTypeGetName(input->type), input->type);
       return kTfLiteError;
   }
-  
+
   long long time_this_instance = esp_timer_get_time() - start_time;
   conv_total_time += time_this_instance;
   //printf("time this instance: %llu\n", time_this_instance / 1000);

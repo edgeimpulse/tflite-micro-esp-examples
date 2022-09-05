@@ -159,6 +159,12 @@ static TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
   long long start_time = esp_timer_get_time();
   switch (input->type) {
     case kTfLiteFloat32: {
+      #if EI_TFLITE_DISABLE_SOFTMAX_IN_F32
+      TF_LITE_KERNEL_LOG(context, "Type %s (%d) not supported.",
+                      TfLiteTypeGetName(input->type), input->type);
+      return kTfLiteError;
+      #endif
+
       tflite::reference_ops::Softmax(
           data.op_data, tflite::micro::GetTensorShape(input),
           tflite::micro::GetTensorData<float>(input),
@@ -166,8 +172,22 @@ static TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
           tflite::micro::GetTensorData<float>(output));
     }
     break;
-    case kTfLiteInt8:
+    case kTfLiteInt8: {
+      #if EI_TFLITE_DISABLE_SOFTMAX_IN_I8
+      TF_LITE_KERNEL_LOG(context, "Type %s (%d) not supported.",
+                      TfLiteTypeGetName(input->type), input->type);
+      return kTfLiteError;
+      #endif
+
+      SoftmaxQuantized(context, input, output, &data);
+    }
     case kTfLiteInt16: {
+      #if EI_TFLITE_DISABLE_SOFTMAX_IN_I16
+      TF_LITE_KERNEL_LOG(context, "Type %s (%d) not supported.",
+                      TfLiteTypeGetName(input->type), input->type);
+      return kTfLiteError;
+      #endif
+
       SoftmaxQuantized(context, input, output, &data);
     }
     break;
