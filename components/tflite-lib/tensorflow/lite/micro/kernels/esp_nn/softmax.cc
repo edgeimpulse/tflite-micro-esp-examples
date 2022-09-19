@@ -161,7 +161,7 @@ static TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
           tflite::micro::GetTensorData<float>(input),
           tflite::micro::GetTensorShape(output),
           tflite::micro::GetTensorData<float>(output));
-      return kTfLiteOk;
+      break;
     }
     case kTfLiteInt8: {
       #if EI_TFLITE_DISABLE_SOFTMAX_IN_I8
@@ -171,7 +171,7 @@ static TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
       #endif
 
       SoftmaxQuantized(context, input, output, &data);
-      return kTfLiteOk;
+      break;
     }
     case kTfLiteInt16: {
       #if EI_TFLITE_DISABLE_SOFTMAX_IN_I16
@@ -181,7 +181,7 @@ static TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
       #endif
 
       SoftmaxQuantized(context, input, output, &data);
-      return kTfLiteOk;
+      break;
     }
     default:
       TF_LITE_KERNEL_LOG(context, "Type %s (%d) not supported.",
