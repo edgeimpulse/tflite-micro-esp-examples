@@ -54,13 +54,28 @@ static void* Init(TfLiteContext* context, const char* buffer, size_t length) {
 void SoftmaxQuantized(TfLiteContext* context, const TfLiteEvalTensor* input,
                       TfLiteEvalTensor* output, const NodeData* data) {
   if (input->type == kTfLiteInt8) {
+#if EI_TFLITE_DISABLE_SOFTMAX_IN_I8
+      TF_LITE_KERNEL_LOG(context, "Type %s (%d) not supported.",
+                      TfLiteTypeGetName(input->type), input->type);
+      return kTfLiteError;
+#endif
     if (output->type == kTfLiteInt16) {
+#if EI_TFLITE_DISABLE_SOFTMAX_OUT_I16
+      TF_LITE_KERNEL_LOG(context, "Type %s (%d) not supported.",
+                      TfLiteTypeGetName(output->type), output->type);
+      return;
+#endif
       tflite::reference_ops::Softmax(
           data->op_data, tflite::micro::GetTensorShape(input),
           tflite::micro::GetTensorData<int8_t>(input),
           tflite::micro::GetTensorShape(output),
           tflite::micro::GetTensorData<int16_t>(output));
     } else {
+#if EI_TFLITE_DISABLE_SOFTMAX_OUT_I8
+      TF_LITE_KERNEL_LOG(context, "Type %s (%d) not supported.",
+                      TfLiteTypeGetName(output->type), output->type);
+      return;
+#endif
 #if ESP_NN
       const int32_t input_beta_multiplier = data->op_data.input_multiplier;
       const int32_t input_beta_left_shift = data->op_data.input_left_shift;
@@ -90,6 +105,11 @@ void SoftmaxQuantized(TfLiteContext* context, const TfLiteEvalTensor* input,
 #endif
     }
   } else {
+#if EI_TFLITE_DISABLE_SOFTMAX_IN_I16
+    TF_LITE_KERNEL_LOG(context, "Type %s (%d) not supported.",
+                    TfLiteTypeGetName(input->type), input->type);
+    return;
+#endif
     tflite::reference_ops::SoftmaxInt16(
         data->op_data, tflite::micro::GetTensorShape(input),
         tflite::micro::GetTensorData<int16_t>(input),
